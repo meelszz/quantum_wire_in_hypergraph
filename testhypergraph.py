@@ -92,7 +92,6 @@ def test_perform_measurement():
     p_123 = np.kron(np.kron(np.kron(np.kron(i_matrix, (i_matrix+x_matrix)/2), (i_matrix+x_matrix)/2), (i_matrix+x_matrix)/2), i_matrix)
     after_m = p_123.dot(h.h_state)
     after_m = after_m / LA.norm(after_m)
-
     h.perform_measurement((1, 2, 3))
 
     if not np.array_equal(after_m, h.h_state):

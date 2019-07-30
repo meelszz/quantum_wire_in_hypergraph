@@ -1,13 +1,24 @@
-n = 7
 import math
-
+n = 7
 total = 0
 f = int(math.factorial(n)/(math.factorial(3)*math.factorial(n-3)))
-m = math.factorial(n)/(math.factorial(n-2)*2)
+
+total = 0
 
 for i in range(f):
-    total = total + math.factorial(f)/(math.factorial(i+1)*math.factorial(f-i-1))
+    m = math.factorial(f)/(math.factorial(i+1)*math.factorial(f-i-1))
+    total = total + m*n*(1 + 2**(n-2))
 
-total = m*total
+n = 5
+f = int(math.factorial(n)/(math.factorial(3)*math.factorial(n-3)))
 
-print(total)
+total2 = 0
+
+for i in range(f):
+    m = math.factorial(f)/(math.factorial(i+1)*math.factorial(f-i-1))
+    total2 = total2 + m*n*(1 + 2**(n-2))
+
+print(total/total2)
+
+
+

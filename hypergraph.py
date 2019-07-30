@@ -1,5 +1,6 @@
 import numpy as np
 from numpy import linalg as LA
+import itertools
 import math
 
 #  A hypergraph consists of its faces (h_graph) the number of qubits
@@ -25,12 +26,13 @@ plus_state = np.array([[np.sqrt(.5)],
                        [np.sqrt(.5)]])
 
 
-def construct_hadamard(dim, q):
+def construct_hadamard(num_v, q):
     if q == 0:
         out = h_matrix
+
     else:
         out = i_matrix
-    for i in range(1, dim):
+    for i in range(1, num_v):
         if i == q:
             out = np.kron(out, h_matrix)
         else:
@@ -38,72 +40,128 @@ def construct_hadamard(dim, q):
     return out
 
 
-class Hypergraph:
-    def __init__(self, faces, num_v):
-        self.faces = faces
-        self.num_v = num_v
-        self.loz = [0] * self.num_v
-        self.i = i_matrix
-        self.initialize_i()
-        self.h_state = plus_state
-        self.create_state()
+# Create n qubit identity matrix : O(n)
+def initialize_i(num_v):
+    i = i_matrix
+    for n in range(num_v - 1):
+        i = np.kron(i, i_matrix)
+    return i
 
-    def initialize_i(self):
-        for n in range(self.num_v -1):
-            self.i = np.kron(self.i, i_matrix)
+# Initialize state as |+>_n : O(n)
+def inititalize_state(num_v):
+    state = plus_state
+    for n in range(num_v-1):
+        state = np.kron(state, plus_state)
+    return state
 
-    def create_state(self):
-        for n in range(self.num_v):
-            if n != 0:
-                self.h_state = np.kron(self.h_state, plus_state)
-            if n == 0:
-                self.loz[0] = z_matrix
+# Create matrices Z_1 to Z_n : O(n^2)
+def initialize_loz(num_v):
+    loz = [0] * num_v
+    loz[0] = z_matrix
+    for k in range(1, num_v):
+        loz[0] = np.kron(loz[0], i_matrix)
+    for n in range(1, num_v):
+        loz[n] = i_matrix
+        for k in range(1, num_v):
+            if n == k:
+                loz[n] = np.kron(loz[n], z_matrix)
             else:
-                self.loz[n] = i_matrix
-            for k in range(1, self.num_v):
-                if n == k:
-                    self.loz[n] = np.kron(self.loz[n], z_matrix)
-                else:
-                    self.loz[n] = np.kron(self.loz[n], i_matrix)
-        for f in self.faces:
+                loz[n] = np.kron(loz[n], i_matrix)
+    return loz
+
+
+def create_m_ops(num_v):
+    set_p = {}
+    primes = (3, 5, 7, 11, 13)
+    for case in list(itertools.product([1, 2], repeat=int(num_v - 2))):
+        # create unique key for case
+        key = gen_case_key(case)
+        # create proj matrix for measurement case
+        p = i_matrix
+        for c in case:
+            if c == 1:
+                p = np.kron(p, (i_matrix - x_matrix) / 2)
+            else:
+                p = np.kron(p, (i_matrix + x_matrix) / 2)
+        p = np.kron(p, i_matrix)
+        # update case key
+        set_p[key] = p
+    return set_p
+
+
+def create_extr_matrices(num_v):
+    extr_ms = [0] * (num_v - 2) * 2
+    for a in range(num_v - 2):
+        id = np.identity((int(2 ** (num_v - a) / 4)))
+        dim = int(2 ** (num_v - a))
+        dim2 = int((1 / 2) * (2 ** (num_v - a)))
+        dim3 = int((3 / 4) * (2 ** (num_v - a)))
+        dim4 = int((1 / 4) * (2 ** (num_v - a)))
+        extr_ms[a] = np.zeros([dim2, dim])
+        extr_ms[a][0:dim4, 0:dim4] = id
+        extr_ms[a][dim4:dim2, dim2:dim3] = id
+        index = (num_v - 2 + a)
+        extr_ms[index] = np.zeros([dim2, dim])
+        extr_ms[index][0:dim4, dim4:dim2] = id
+        extr_ms[index][dim4:dim2, dim3:dim] = id
+    return extr_ms
+
+
+def create_loh(num_v):
+    loh = [0] * (num_v - 2)
+    for i in range(num_v-2):
+        loh[i] = construct_hadamard(num_v-i, 1)
+    had_1_on_3 = np.kron(np.kron(i_matrix, h_matrix), i_matrix)
+    return loh
+
+
+def gen_case_key(case):
+    primes = (5, 7, 11, 13, 17)
+    key = 0
+    for i in range(len(case)):
+        key = key + (case[i] * primes[i])
+    return key
+
+
+class Hypergraph:
+    def __init__(self, num_v):
+        self.num_v = num_v
+        self.loz = initialize_loz(num_v)
+        self.i = initialize_i(num_v)
+        self.m_ops = create_m_ops(num_v)
+        # extr_ms[(n-1)th] is the nth extraction with measurement 0
+        # extr_ms[2*(n-1)th] is the nth extraction with measurement 1
+        self.extr_ms = create_extr_matrices(num_v)
+        self.loh = create_loh(num_v)
+        self.h_state = 0
+
+    # Construct state from CZ matrices : O(n) for small cases
+    def construct_state(self, faces):
+        self.h_state = inititalize_state(self.num_v)
+        for f in faces:
             cz = self.i - 2 * ((self.i - self.loz[f[0]]) / 2).dot((self.i - self.loz[f[1]]) / 2).dot(((self.i - self.loz[f[2]]) / 2))
             self.h_state = cz.dot(self.h_state)
 
     def normalize(self):
-        for i in range(np.shape(self.h_state)[0]):
-            if LA.norm(self.h_state[i]) != 0:
-                self.h_state[i] = self.h_state[i] / LA.norm(self.h_state[i])
+        if LA.norm(self.h_state) != 0:
+            self.h_state = self.h_state / LA.norm(self.h_state)
 
-    def perform_measurement(self, m_set):
-        if 0 in m_set:
-            p = (x_matrix + i_matrix)/2
-        else:
-            p = i_matrix
-        for i in range(1, self.num_v):
-            if i in m_set:
-                p = np.kron(p, (x_matrix + i_matrix)/2)
-            else:
-                p = np.kron(p, i_matrix)
+    # Perform measurement on state : O(n)
+    def perform_measurement(self, case):
+        key = gen_case_key(case)
+        p = self.m_ops[key]
         self.h_state = p.dot(self.h_state)
+        self.normalize()
+        return p
 
-    def extract_bits(self, m_set):
-        los = []
-        self.h_state = [self.h_state]
-        for i in range(len(m_set)):
-            self.extract(m_set[i] - i, los)
-
-    def extract(self, i, los):
-        dim = len(self.h_state[0])
-        sub_size = int(dim/(2**(i+1)))
-        sub_i = np.identity(sub_size)
-        extr_matrix_0 = np.zeros([int(dim/2), dim])
-        extr_matrix_1 = np.zeros([int(dim/ 2), dim])
-        for k in range(2**i):
-            extr_matrix_0[k * sub_size:sub_size * (k + 1), 2 * k * sub_size:sub_size*(2*k + 1)] = sub_i
-            extr_matrix_1[k * sub_size:sub_size * (k + 1), (2 * k + 1) * sub_size:sub_size * (2 * k + 2)] = sub_i
-        had_on_i = construct_hadamard(self.num_v, i)
-        num_s = np.shape(self.h_state)[0]
-        for j in range(num_s):
-            self.h_state.append(extr_matrix_1.dot(had_on_i.dot(self.h_state[j])))
-            self.h_state[j] = extr_matrix_0.dot(had_on_i.dot(self.h_state[j]))
-        self.num_v = self.num_v - 1
+    # Extract bits : O(n)
+    def extract_bits(self, case):
+        for i in range(self.num_v - 2):
+            had = self.loh[i]
+            if case[i] == 2:
+                extr_m_0 = self.extr_ms[i]
+                self.h_state = extr_m_0.dot(had.dot(self.h_state))
+            else:
+                index = self.num_v - 2 + i
+                extr_m_1 = self.extr_ms[index]
+                self.h_state = extr_m_1.dot(had.dot(self.h_state))
