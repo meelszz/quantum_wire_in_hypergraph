@@ -20,20 +20,21 @@ for face in itertools.combinations(range(0, num_v), 3):
 # create utility for hypergraph with num_v number of qubits
 # create all Z, I, Projection(for measurement), Extraction and Hadamard matrices
 
-#before_h_class_time = time.time()
-
 h = Hypergraph(num_v)
 
-#after_h_class_time = time.time()
-#print("Time to create Hypergraph:", after_h_class_time - before_h_class_time)
+k = 0
 
+time_1 = time.perf_counter()
 # create all possible hypergraphs taking each combination of faces
 for i in range(len(possible_faces)):
-    print(len(possible_faces))
+    i = 18
     for faces in itertools.combinations(possible_faces, i+1):
+        k += 1
         case_list = []
         prob_list = []
+        time_3 = time.perf_counter()
         h.construct_state(faces)
+        time_4 = time.perf_counter()
         # case[k] == 0 represents measurement result of m[k] == 0
         # case[k] == 1 represents measurement result of m[k] == 1
         for case in list(itertools.product([0, 1], repeat=len(m))):
@@ -56,10 +57,20 @@ for i in range(len(possible_faces)):
             h.h_state = save_h_state
         if np.isclose(1, sum(prob_list)):
             print("Faces: ", faces, " with cases", case_list, "with total prob", sum(prob_list))
+        if k == 1:
+            break
+    if k == 1:
+        break
 
+
+time_2 = time.perf_counter()
 end_time = time.time()
 
-print("Total time:", end_time - start_time)
+#print("Total time:", end_time - start_time)
+print("Time 1:", time_2 - time_1)
+print("Time 2:", time_4 - time_3)
+
+print(len(list(itertools.product([0, 1], repeat=4))))
 
 
 
